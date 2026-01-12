@@ -55,4 +55,8 @@ Spawning & authority:
 ## Known Issues
 -Singleplayer isn't implemented yet and the Singleplayer button is decorative only.
 -Cannot join other player's sessions in aggressively guarded internet connections (Such as certain work/university connections, etc)
+<<<<<<< HEAD
 -Severe packet losses cause attempts to grab objects to fail entirely :(
+=======
+-Severe packet losses cause attempts to grab objects to fail entirely :(
+>>>>>>> 90e45d1fa645427233d15537a77d5d51b4a4555d

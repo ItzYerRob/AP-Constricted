@@ -51,17 +51,20 @@ public class MedkitPickup : NetworkBehaviour, IInteractable
         //Destroy / despawn medkit so nobody else can use it
         if (singleUse)
         {
-            var netObj = GetComponent<NetworkObject>();
-            if (netObj != null && netObj.IsSpawned)
-            {
-                //Despawn across the network
-                netObj.Despawn();
-            }
-            else
-            {
-                //Fallback for non-networked testing
-                Destroy(gameObject);
-            }
+            Destroy(gameObject);
+            
+            //In case we want to destroy this for all players? Dunno
+            // var netObj = GetComponent<NetworkObject>();
+            // if (netObj != null && netObj.IsSpawned)
+            // {
+            //     //Despawn across the network
+            //     netObj.Despawn();
+            // }
+            // else
+            // {
+            //     //Fallback for non-networked testing
+            //     Destroy(gameObject);
+            // }
         }
     }
 

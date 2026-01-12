@@ -7,7 +7,8 @@ public class PlayerController : NetworkBehaviour
     public CharacterStats charStats;
 
     public Transform cam;
-    public float interactDistance = 3f;
+    public float interactDistance = 5f;
+    public LayerMask interactMask;
     public GameObject flashLight;
 
     [DoNotSerialize]public float horizontalInput;
@@ -104,7 +105,6 @@ public class PlayerController : NetworkBehaviour
         currentState?.FixedUpdate();
     }
 
-
     public void SwitchState(IPlayerState newState) {
         currentState?.Exit();
         currentState = newState;
@@ -128,7 +128,7 @@ public class PlayerController : NetworkBehaviour
     
     private void DetectInteractable() {
         Ray ray = new Ray(cam.position, cam.forward);
-        if (Physics.Raycast(ray, out var hit, interactDistance, ~0, QueryTriggerInteraction.Collide)) {
+        if (Physics.Raycast(ray, out var hit, interactDistance, interactMask, QueryTriggerInteraction.Collide)) {
             var interactable = hit.collider.GetComponentInParent<IInteractable>();
             if (interactable != null && interactable.TryGetHint(gameObject, out var hint)) {
                 //Check if anything about the hint changed, not just the interactable or label
@@ -151,7 +151,6 @@ public class PlayerController : NetworkBehaviour
             UIManager.Instance.interactPrompt.SetActive(false);
         }
     }
-
 
     private void OnDestroy() {
         if (IsClient) {
@@ -177,6 +176,4 @@ public class PlayerController : NetworkBehaviour
         }
     }
 
-
 }
-

@@ -583,7 +583,10 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   charStats: {fileID: 8236235206415388840}
   cam: {fileID: 3266590419342102810}
-  interactDistance: 3
+  interactDistance: 5
+  interactMask:
+    serializedVersion: 2
+    m_Bits: 4023
   flashLight: {fileID: 3810079172565310812}
   horizontalInput: 0
   verticalInput: 0
@@ -629,7 +632,7 @@ MonoBehaviour:
   AreWeAPlayer: 1
   HaveWeAHealthBar: 0
   gravityForce: 10
-  moveSpeed: 15
+  moveSpeed: 16
   sprintSpeed: 9
   rotationSpeed: 8
   jumpForce: 110
@@ -1030,9 +1033,8 @@ MonoBehaviour:
   throwForce: 200
   debugLogs: 1
   debugDraw: 1
-  poseLogEveryN: 25
-  posSendThreshold: 0.05
-  rotSendThreshold: 1
+  grabRetryInterval: 0.2
+  grabTimeout: 2
 --- !u!1 &8664241628383142431
 GameObject:
   m_ObjectHideFlags: 0

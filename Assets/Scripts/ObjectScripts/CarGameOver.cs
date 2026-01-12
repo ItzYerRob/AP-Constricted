@@ -8,15 +8,12 @@ public class GameOver : MonoBehaviour, IInteractable
     public bool requirePlayerController = true;
     private bool _consumed; //Prevent double activation if multiple hits/frames call Interact.
 
-    public bool TryGetHint(GameObject interactor, out InteractionHint hint)
-    {
-
+    public bool TryGetHint(GameObject interactor, out InteractionHint hint) {
         hint = new InteractionHint("End the Game [E]");
         return true;
     }
 
-    public void Interact(GameObject interactor)
-    {
+    public void Interact(GameObject interactor) {
         if (_consumed) return;
 
         //Validate interactor is the player

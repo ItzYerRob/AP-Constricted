@@ -13,10 +13,11 @@ public class UIManager : MonoBehaviour
     //This is the local player's HUD resource bar
     public ResourceBar playerResourceBar;
 
-    private void Awake()
-    {
-        if (Instance != null && Instance != this)
-        {
+    [Header("Cutscene")]
+    public GameObject startGameScreen;
+
+    private void Awake() {
+        if (Instance != null && Instance != this) {
             Destroy(gameObject);
             return;
         }
@@ -24,17 +25,21 @@ public class UIManager : MonoBehaviour
         Instance = this;
 
         DontDestroyOnLoad(gameObject);
+        
+        startGameScreen.SetActive(true);
     }
 
-    public void SetInteractLabel(string text, bool available, string reason = null)
-    {
-        if (interactLabel == null)
-            return;
+    public void SetInteractLabel(string text, bool available, string reason = null) {
+        if (interactLabel == null) return;
 
         interactLabel.text = available 
             ? text 
             : $"{text} ({reason ?? "Unavailable"})";
 
         interactLabel.alpha = available ? 1f : 0.6f;
+    }
+
+    void Update() {
+        if (Input.GetKeyDown(KeyCode.E)) { Destroy(startGameScreen, 0.5f); }
     }
 }

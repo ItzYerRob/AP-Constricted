@@ -6,14 +6,12 @@ public struct RigidbodyState : INetworkSerializable
     public Vector3 Position;
     public Quaternion Rotation;
     public Vector3 Velocity;
-    public double ServerTime; //NGO network time
 
     public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T : IReaderWriter
     {
         serializer.SerializeValue(ref Position);
         serializer.SerializeValue(ref Rotation);
         serializer.SerializeValue(ref Velocity);
-        serializer.SerializeValue(ref ServerTime);
     }
 }
 
@@ -23,11 +21,8 @@ public class AuthoritativeNetworkRB : NetworkBehaviour
     [SerializeField] private float correctionDuration = 0.15f;
     [SerializeField] private float snapDistance = 3.0f;
 
-    private NetworkVariable<RigidbodyState> _state =
-        new NetworkVariable<RigidbodyState>(
-            writePerm: NetworkVariableWritePermission.Owner);
+    private NetworkVariable<RigidbodyState> _state = new NetworkVariable<RigidbodyState>(writePerm: NetworkVariableWritePermission.Owner);
 
-    private RigidbodyState _lastState;
     private bool _hasState;
 
     private Vector3 _targetPos;
@@ -35,17 +30,31 @@ public class AuthoritativeNetworkRB : NetworkBehaviour
     private Vector3 _targetVel;
     private float _correctionTimer;
 
+    #region Throttling
+    [Header("Send Throttling")]
+    [SerializeField] private float sendRateHz = 20f; //20 Updates/sec
+    [SerializeField] private float posThreshold = 0.02f; //Meters
+    [SerializeField] private float rotThresholdDeg = 1.5f; //Degrees
+    [SerializeField] private float velThreshold = 0.05f; //m/s
+    [SerializeField] private float maxSilence = 0.25f; //Interval for forced update (0.25 = 4 forced updates per second)
+    private float _nextSendTime;
+    private float _lastSendTime;
+    private RigidbodyState _lastSent;
+    private bool _hasLastSent;
+    #endregion Throttling
+
     private void Awake() {
         if (!rb) rb = GetComponent<Rigidbody>();
     }
 
     public override void OnNetworkSpawn() {
-        base.OnNetworkSpawn();
-
-        if (IsOwner) { EnableOwnerSimulation(); }
-        else { EnableFollowerMode(); }
+        if (IsOwner) EnableOwnerSimulation();
+        else EnableFollowerMode();
 
         _state.OnValueChanged += OnStateChanged;
+    }
+    public override void OnNetworkDespawn() {
+        _state.OnValueChanged -= OnStateChanged;
     }
     private void EnableOwnerSimulation() { 
         rb.isKinematic = false;   //Owner simulates physics
@@ -62,31 +71,47 @@ public class AuthoritativeNetworkRB : NetworkBehaviour
         EnableFollowerMode();
     }
 
-
-
-    private void OnDestroy() {
-        if (_state != null) _state.OnValueChanged -= OnStateChanged;
-    }
-
     private void FixedUpdate() {
         if (!IsSpawned) return;
 
         if (IsOwner) {
             //This instance is authoritative right now (server or client)
+            float now = Time.time;
+            float interval = (sendRateHz <= 0f) ? 0f : (1f / sendRateHz);
+
+            // Build current state
             var s = new RigidbodyState {
-                Position   = rb.position,
-                Rotation   = rb.rotation,
-                Velocity   = rb.linearVelocity,
-                ServerTime = NetworkManager.ServerTime.Time
+                Position = rb.position,
+                Rotation = rb.rotation,
+                Velocity = rb.linearVelocity,
             };
-            _state.Value = s;
+
+            //Throttling
+            bool due = now >= _nextSendTime;
+            bool force = !_hasLastSent || (now - _lastSendTime) >= maxSilence;
+
+            bool movedEnough = !_hasLastSent ||
+                (s.Position - _lastSent.Position).sqrMagnitude >= posThreshold * posThreshold ||
+                Quaternion.Angle(s.Rotation, _lastSent.Rotation) >= rotThresholdDeg ||
+                (s.Velocity - _lastSent.Velocity).sqrMagnitude >= velThreshold * velThreshold;
+
+            if ((due && movedEnough) || force)
+            {
+                _state.Value = s;
+                _lastSent = s;
+                _hasLastSent = true;
+                _lastSendTime = now;
+                _nextSendTime = now + interval;
+            }
+
+            return;
         }
         else {
             //Follower mode: apply interpolation to the latest _state
             if (!_hasState) return;
 
-            float dist = Vector3.Distance(rb.position, _targetPos);
-            if (dist > snapDistance) {
+            float snapDistSq = snapDistance * snapDistance;
+            if ((rb.position - _targetPos).sqrMagnitude > snapDistSq) {
                 rb.position       = _targetPos;
                 rb.rotation       = _targetRot;
                 rb.linearVelocity       = _targetVel;
@@ -113,47 +138,11 @@ public class AuthoritativeNetworkRB : NetworkBehaviour
     private void OnStateChanged(RigidbodyState oldState, RigidbodyState newState) {
         if (IsOwner) return; //We are the writer; Don't treat our own state as remote
 
-        _lastState      = newState;
         _hasState       = true;
 
         _targetPos      = newState.Position;
         _targetRot      = newState.Rotation;
         _targetVel      = newState.Velocity;
         _correctionTimer = 0f;
-    }
-
-    [Rpc(SendTo.Server, RequireOwnership = false)]
-    private void RequestTemporaryAuthorityRpc(float duration, RpcParams rpcParams = default) {
-        ulong senderClientId = rpcParams.Receive.SenderClientId; //Who sent this?
-
-        if (!IsServer) return;
-
-        StartCoroutine(GrantTemporaryAuthorityCoroutine(senderClientId, duration));
-    }
-
-    public void RequestTemporaryAuthority(float duration) {
-        if (!IsOwner) { RequestTemporaryAuthorityRpc(duration); }
-    }
-
-    private System.Collections.IEnumerator GrantTemporaryAuthorityCoroutine(ulong clientId, float duration) {
-        if (!IsServer) yield break;
-
-        ulong originalOwner = OwnerClientId;
-
-        NetworkObject.ChangeOwnership(clientId); //Give ownership to the client
-
-        yield return new WaitForSeconds(duration);
-
-        //Only revert if the object is still owned by that client
-        if (OwnerClientId == clientId) {
-            if (originalOwner == NetworkManager.ServerClientId) {
-                //Return to server authority
-                NetworkObject.RemoveOwnership(); //NGO: removes owner, server becomes owner
-            }
-            else {
-                //Restore previous non-server owner if needed
-                NetworkObject.ChangeOwnership(originalOwner);
-            }
-        }
     }
 }

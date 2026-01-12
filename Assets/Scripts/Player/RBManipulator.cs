@@ -24,8 +24,6 @@ public class RBManipulator : NetworkBehaviour
     [Header("Debug")]
     public bool debugLogs = true;
     public bool debugDraw = true;
-    [Tooltip("Reduce console noise by printing at most once per N FixedUpdate frames for pose stream.")]
-    public int poseLogEveryN = 25;
 
     private float objectSize;
     private static readonly RaycastHit[] _hitBuffer = new RaycastHit[32]; //Reuse buffers
@@ -33,6 +31,15 @@ public class RBManipulator : NetworkBehaviour
     //Net-hold state
     NetGrabbableRB heldNet;
     Rigidbody heldRB;
+
+    uint _grabToken;
+    bool _pendingGrab;
+    float _pendingSince;
+    float _retryAccumulator;
+
+    [Header("Grab Retry")]
+    public float grabRetryInterval = 0.2f;
+    public float grabTimeout = 2.0f;
 
     public override void OnNetworkSpawn()
     {
@@ -60,45 +67,111 @@ public class RBManipulator : NetworkBehaviour
         if (Input.GetMouseButtonUp(1)) Release(true);
     }
     
-    private Vector3 lastSentPos;
-    private Quaternion lastSentRot;
-    public float posSendThreshold = 0.05f;
-    public float rotSendThreshold = 1.0f; //1 degree
     void FixedUpdate()
     {
         if (!IsOwner || !IsClient) return;
-        if (!heldRB) return;
 
-        //Just move the object locally; AuthoritativeNetworkRB will publish this state
-        MoveHeldObject();
+        //If we grabbed but it wasnt acknowledged, retry
+        if (_pendingGrab && heldNet)
+        {
+            bool ack =
+                heldNet.Held.Held &&
+                heldNet.Held.HolderId == NetworkManager.Singleton.LocalClientId &&
+                heldNet.Held.Token == _grabToken;
+
+            if (!ack)
+            {
+                //Timeout: give up and revert local optimistic state
+                if (Time.time - _pendingSince > grabTimeout)
+                {
+                    FailPendingGrab();
+                    return;
+                }
+
+                //Periodic resend (don't spam every tick)
+                _retryAccumulator += Time.fixedDeltaTime; //Accumulate time since last FixedUpdate
+                if (_retryAccumulator >= grabRetryInterval) {
+                    //Reset the accumulator
+                    _retryAccumulator = 0f;
+
+                    //Resend the RPC
+                    heldNet.TryGrabServerRpc(_grabToken, cam.transform.position, cam.transform.forward);
+                }
+                return; //Don’t apply hold forces until acked
+            }
+
+            _pendingGrab = false;
+
+            //Now it is safe to apply forces / movement
+        }
+
+        if (heldRB) MoveHeldObject();
     }
 
     void TryGrab()
     {
-        if (!cam) return;
-        if (!NetworkManager.Singleton || !NetworkManager.Singleton.IsClient) return;
-
         if (!TryGetBestHit(out RaycastHit bestHit)) return;
 
         var rb = bestHit.rigidbody;
-        if (!rb) return;
+        var net = rb ? rb.GetComponent<NetGrabbableRB>() : null;
+        if (!rb || !net) return;
 
-        var net = rb.GetComponent<NetGrabbableRB>();
-        if (!net) return;
+        //Start a new request token
+        _grabToken++;
+        _pendingGrab = true;
+        _pendingSince = Time.time;
+        _retryAccumulator = 0f;
 
-        //Ask server to grant us ownership and mark as held
-        net.TryGrabServerRpc(cam.transform.position, cam.transform.forward);
+        //Ask server
+        net.TryGrabServerRpc(_grabToken, cam.transform.position, cam.transform.forward);
 
         //Optimistic local hold
         heldRB = rb;
         heldNet = net;
-        objectSize = bestHit.collider.bounds.extents.magnitude;
         heldRB.useGravity = false;
-
-        //isKinematic is controlled by AuthoritativeNetworkRB via ownership, but setting it here on the local client is ok (should be aware of duplication)
         heldRB.isKinematic = false;
+
+        objectSize = bestHit.collider.bounds.extents.magnitude;
     }
 
+    void FailPendingGrab()
+    {
+        //Revert local optimistic changes
+        if (heldRB)
+        {
+            heldRB.useGravity = true;
+        }
+        heldRB = null;
+        heldNet = null;
+        _pendingGrab = false;
+    }
+    void Release(bool throwIt)
+    {
+        if (!heldRB) return;
+
+        //If we never got ack, just local-drop (don’t send release)
+        if (_pendingGrab)
+        {
+            FailPendingGrab();
+            return;
+        }
+
+        //Normal release
+        var v = heldRB.linearVelocity;
+        var w = heldRB.angularVelocity;
+
+        if (throwIt)
+        {
+            heldRB.AddForce(cam.transform.forward * throwForce, ForceMode.Impulse);
+            v = heldRB.linearVelocity;
+        }
+
+        heldNet.ReleaseServerRpc(_grabToken, heldRB.position, heldRB.rotation, v, w);
+
+        heldRB.useGravity = true;
+        heldRB = null;
+        heldNet = null;
+    }
 
     void MoveHeldObject() {
         Vector3 targetPos =
@@ -115,29 +188,6 @@ public class RBManipulator : NetworkBehaviour
 
         if (debugDraw) Debug.DrawLine(heldRB.position, targetPos, Color.magenta, Time.fixedDeltaTime);
     }
-
-    private float _lastReleaseTime;
-    void Release(bool throwIt) {
-        if (!heldRB) return;
-
-        Vector3 v = heldRB.linearVelocity;
-        Vector3 w = heldRB.angularVelocity;
-
-        if (throwIt) {
-            heldRB.AddForce(cam.transform.forward * throwForce, ForceMode.Impulse);
-            v = heldRB.linearVelocity;
-        }
-
-        if (heldNet) {
-            heldNet.ReleaseServerRpc(heldRB.position, heldRB.rotation, v, w);
-        }
-
-        heldRB.useGravity = true;
-
-        heldRB  = null;
-        heldNet = null;
-    }
-
 
     bool TryGetBestHit(out RaycastHit bestHit) {
         return useScreenSpaceAim

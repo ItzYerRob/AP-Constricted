@@ -23,8 +23,7 @@ public class Barricades : NetworkBehaviour, IInteractable
             //Player is high enough level
             hint = new InteractionHint("Break [E]");
         }
-        else
-        {
+        else {
             //Player level too low
             hint = new InteractionHint($"Level {requiredLevel} required to break");
         }
@@ -32,44 +31,63 @@ public class Barricades : NetworkBehaviour, IInteractable
         return true;
     }
 
-    public void Interact(GameObject interactor)
-    {
+    public void Interact(GameObject interactor) {
         if (_consumed) return;
 
-        //Validate interactor is the player
+        //Sanity check on caller side
         var player = interactor.GetComponent<PlayerController>();
         if (requirePlayerController && player == null) return;
 
-        //Extra safety: enforce level requirement on the logic side as well.
-        if (GameManager.Instance == null || GameManager.Instance.PlayerLevel < requiredLevel)
-        {
-            //Player not allowed to break yet.
+        //Gate by the local client's level. (Host will also run this locally, which is fine.)
+        int localLevel = GetLocalPlayerLevel();
+        if (localLevel < requiredLevel)
+            return;
+
+        _consumed = true; //prevent multiple interact prompts somehow.
+
+        //If we're the server/host, we can immediately despawn.
+        if (IsServer) {
+            DespawnOnServer();
             return;
         }
 
+        //Otherwise ask the server to despawn. We only need some identifier for who requested; the server doesn't need level.
+        var interactorNetObj = interactor.GetComponent<NetworkObject>();
+        if (interactorNetObj == null) return;
+
+        RequestBreakServerRpc(interactorNetObj.NetworkObjectId);
+    }
+
+    private int GetLocalPlayerLevel() {
+        //Use local GameManager state only.
+        return (GameManager.Instance != null) ? GameManager.Instance.PlayerLevel : 0;
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    private void RequestBreakServerRpc(ulong interactorNetworkObjectId, ServerRpcParams rpcParams = default) {
+        if (_consumed) return;
+
+        //Server-side validation: ensure the requester object exists
+        if (!NetworkManager.SpawnManager.SpawnedObjects.TryGetValue(interactorNetworkObjectId, out var interactorNetObj)) return;
+
+        if (requirePlayerController && interactorNetObj.GetComponent<PlayerController>() == null) return;
+
         _consumed = true;
 
-        //We can put VFX/SFX here before destroy, like trhis:
-        // Instantiate(pickupVfx, transform.position, Quaternion.identity);
+        PlayPickupEffectsClientRpc();
+        DespawnOnServer();
+    }
 
+    private void DespawnOnServer() {
+        //Server-side despawn
         var netObj = GetComponent<NetworkObject>();
-        if (netObj != null && netObj.IsSpawned)
-        {
-            //Despawn across the network
-            netObj.Despawn();
-        }
-        else
-        {
-            //Fallback for non-networked testing
-            Destroy(gameObject);
-        }
+        if (netObj != null && netObj.IsSpawned) netObj.Despawn(true);
+        else Destroy(gameObject);
     }
 
     [ClientRpc]
-    private void PlayPickupEffectsClientRpc()
-    {
-        //Put local-only visuals here, ex::
-        // AudioSource.PlayClipAtPoint(pickupSound, transform.position);
-        // Instantiate(pickupVfxPrefab, transform.position, Quaternion.identity);
+    private void PlayPickupEffectsClientRpc() {
+        //visuals/audio on all clients
     }
+
 }

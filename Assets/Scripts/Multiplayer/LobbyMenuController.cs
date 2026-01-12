@@ -54,10 +54,8 @@ public class LobbyMenuController : MonoBehaviour
         _state == LobbyState.Leaving;
     bool IsInSession => _state == LobbyState.InSession && _session != null;
 
-    void Awake()
-    {
-        if (Instance != null && Instance != this)
-        {
+    void Awake() {
+        if (Instance != null && Instance != this) {
             //Destroy duplicate and exit
             Destroy(this.gameObject);
             return;
@@ -121,8 +119,7 @@ public class LobbyMenuController : MonoBehaviour
     void OnChangedCallback() => RunOnMainThread(RefreshLobbyUI);
 
     //Session lifecycle (create/join/leave)
-    public async Task HostCreateAsync()
-    {
+    public async Task HostCreateAsync() {
         //Guard against overlapping operations
         if (IsBusy) {
             RunOnMainThread(() => {
@@ -141,8 +138,7 @@ public class LobbyMenuController : MonoBehaviour
         try {
             await UgsReady.EnsureAsync();
 
-            var options = new SessionOptions
-            {
+            var options = new SessionOptions {
                 Name = "My Session",
                 MaxPlayers = 4,
                 IsPrivate = false
@@ -157,8 +153,7 @@ public class LobbyMenuController : MonoBehaviour
             _session = newSession;
             HookSessionEvents(_session);
 
-            RunOnMainThread(() =>
-            {
+            RunOnMainThread(() => {
                 if (statusText != null) statusText.text = $"Hosting. SessionId={_session.Id}";
                 if (joinCodeText != null) joinCodeText.text = _session.Code ?? "-";
                 SetLobbyUIEnabled(true);
@@ -169,13 +164,11 @@ public class LobbyMenuController : MonoBehaviour
         }
         catch (Exception e) {
             Debug.LogException(e);
-            RunOnMainThread(() =>
-            {
+            RunOnMainThread(() => {
                 if (statusText != null) statusText.text = $"Host failed: {e.Message}";
             });
 
-            if (_session != null)
-            {
+            if (_session != null) {
                 try { await _session.LeaveAsync(); } catch { }
                 _session = null;
             }
@@ -196,16 +189,14 @@ public class LobbyMenuController : MonoBehaviour
         }
 
         if (IsBusy) {
-            RunOnMainThread(() =>
-            {
+            RunOnMainThread(() => {
                 if (statusText != null) statusText.text = "Busy, please wait...";
             });
             return;
         }
 
         //Force leave current session before joining a new one
-        if (IsInSession)
-        {
+        if (IsInSession) {
             await LeaveSessionAsync();
         }
 

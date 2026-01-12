@@ -3,60 +3,70 @@ using UnityEngine;
 public sealed class InvestigateNoiseState : IEnemyState
 {
     private readonly EnemyAI enemy;
+    private bool _acquiredTarget;
+    private bool _finishedEvaluation;
 
     public InvestigateNoiseState(EnemyAI enemy) => this.enemy = enemy;
 
-    public void Enter()
-    {
+    public void Enter() {
+        _acquiredTarget = false;
+        _finishedEvaluation = false;
+
         enemy.OnEnterInvestigate();
-        //Stop following patrol and walk directly to noise point.
+
+        //Stop patrol path following; walk directly to the noise point.
         enemy.motor.followPatrolPoints = false;
 
-        if (enemy.hasNoiseToInvestigate) {
-            enemy.motor.SetDestination(enemy.noisePosition);
-        }
+        //Commit point for learning.
+        enemy.BeginNoiseInvestigationEvaluation();
+
+        if (enemy.hasNoiseToInvestigate) enemy.motor.SetDestination(enemy.noisePosition);
     }
 
-    public void Update()
-    {
-        //If we see a target while moving to noise, then enter pursuit.
+    public void Update() {
+        //Seeing a target while investigating -> success case.
         if (enemy.CanAggroTarget()) {
+            _acquiredTarget = true;
             enemy.SwitchState(enemy.PursueState);
             return;
         }
 
-        //If hearing has been cleared externally, go back to patrol.
-        if (!enemy.hasNoiseToInvestigate)
-        {
+        //If noise got cleared externally -> treat as failure and leave.
+        if (!enemy.hasNoiseToInvestigate) {
             enemy.SwitchState(enemy.PatrolState);
             return;
         }
 
-        //Give up after N seconds if nothing is found.
-        if (Time.time - enemy.noiseHeardTime > enemy.investigateDuration)
-        {
+        //Time out -> clear noise and leave.
+        if (Time.time - enemy.noiseHeardTime > enemy.investigateDuration) {
             enemy.hasNoiseToInvestigate = false;
             enemy.SwitchState(enemy.PatrolState);
             return;
         }
 
-        //Check if we’re close enough to consider the point searched.
+        //Reached the point -> clear noise and leave.
         float sqrDist = (enemy.transform.position - enemy.noisePosition).sqrMagnitude;
-        if (sqrDist <= enemy.investigateReachRadius * enemy.investigateReachRadius)
-        {
+        float reachSqr = enemy.investigateReachRadius * enemy.investigateReachRadius;
+
+        if (sqrDist <= reachSqr) {
             enemy.hasNoiseToInvestigate = false;
             enemy.SwitchState(enemy.PatrolState);
             return;
         }
 
-        //Keep walking toward the noise. If a new noise is heard, enemy.noisePosition will be updated by NotifyHeardNoise().
+        //Keep moving. If NotifyHeardNoise updates enemy.noisePosition mid-run, naturally steer toward the newest/best noise without restarting evaluation.
         enemy.motor.SetDestination(enemy.noisePosition);
     }
 
     public void FixedUpdate() { }
 
     public void Exit() {
-        //Clear explicit target; PatrolState.Enter will re-enable patrol pathing.
         enemy.motor.ClearTarget();
+
+        // Finish exactly once.
+        if (_finishedEvaluation) return;
+        _finishedEvaluation = true;
+
+        enemy.FinishNoiseEvaluation(_acquiredTarget);
     }
 }

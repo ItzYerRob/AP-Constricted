@@ -198,14 +198,12 @@ public class EnemyNavmeshMotor : MonoBehaviour
         }
         else {
             //On ground, only disable gravity while actively climbing
-            if (!isClimbingSlope)
-            {
+            if (!isClimbingSlope) {
                 Vector3 gravityAlongNormal = Vector3.Project(worldGravity, -groundHit.normal);
                 rb.AddForce(gravityAlongNormal, ForceMode.Acceleration);
             }
         }
     }
-
 
     private void CheckGround() {
         Vector3 origin = transform.position + Vector3.up * 0.5f;
@@ -337,8 +335,7 @@ public class EnemyNavmeshMotor : MonoBehaviour
     }
 
     void OnValidate() {
-        if (agent != null)
-            agent.stoppingDistance = stoppingDistance;
+        if (agent != null) agent.stoppingDistance = stoppingDistance;
     }
 #endif
 }

@@ -5,9 +5,14 @@ public sealed class GameManager : MonoBehaviour
 {
     public static GameManager Instance { get; private set; }
 
+    public bool IsDebug = false;
+
     public int PlayerLevel { get; private set; } = 1;
 
     public bool PickedUpKeys { get; private set; } = false;
+
+    public float BadNoise = 0;
+    // public float BadNoise { get; set; } = 0;
 
     public event Action<int> OnPlayerLevelChanged;
 
@@ -26,8 +31,7 @@ public sealed class GameManager : MonoBehaviour
         DontDestroyOnLoad(gameObject);
     }
 
-    public void AddLevels(int amount)
-    {
+    public void AddLevels(int amount) {
         if (amount <= 0) return;
         PlayerLevel += amount;
         OnPlayerLevelChanged?.Invoke(PlayerLevel);
@@ -35,9 +39,12 @@ public sealed class GameManager : MonoBehaviour
         Debug.Log($"Player leveled up to {PlayerLevel}");
     }
 
-    public void PickedUpKey()
-    {
+    public void PickedUpKey() {
         PickedUpKeys = true;
         Debug.Log($"Player picked up key");
+    }
+
+    void FixedUpdate() {
+        Debug.Log("Bad Noise:" + BadNoise);
     }
 }

@@ -33,7 +33,7 @@ static class UgsReady
 
     public static Task EnsureAsync()
     {
-        //Coalesce concurrent callers
+        //Prevent multiple init calls
         return _readyTask ??= EnsureImpl();
     }
 

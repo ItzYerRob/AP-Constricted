@@ -27,7 +27,7 @@ public class QTEConfig : ScriptableObject
 
     [Header("Multi-key / Random Selection")]
     [Tooltip("Pool to randomly pick keys from when no override is provided.")]
-    public KeyCode[] keyPool = new KeyCode[] {KeyCode.E, KeyCode.F, KeyCode.J };
+    public KeyCode[] keyPool = new KeyCode[] {KeyCode.H, KeyCode.F, KeyCode.J };
 
     [Tooltip("How many keys to pick from the pool for a QTE (1 = show one key).")]
     [Min(1)] public int keysToPick = 1;

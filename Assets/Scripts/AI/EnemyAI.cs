@@ -2,7 +2,7 @@ using Unity.Netcode;
 using UnityEngine;
 
 [DisallowMultipleComponent]
-public class EnemyAI : NetworkBehaviour
+public partial class EnemyAI : NetworkBehaviour
 {
     [Header("References")]
     public EnemyNavmeshMotor motor;
@@ -10,7 +10,7 @@ public class EnemyAI : NetworkBehaviour
     public Transform eye;
 
     [Header("Perception (Distance/FOV)")]
-    [Tooltip("If false, uses simple aggro/deaggro ranges (legacy). If true, also requires target to be within a view cone.")]
+    [Tooltip("If false, uses simple aggro/deaggro ranges. If true, also requires target to be within a view cone.")]
     public bool useViewCone = true;
 
     [Min(0f)] public float aggroRange = 12f;
@@ -25,20 +25,20 @@ public class EnemyAI : NetworkBehaviour
     [Tooltip("Half-angle (degrees) for keeping aggro; usually >= viewHalfAngle to add angular hysteresis.")]
     [Range(0f, 179.9f)] public float loseHalfAngle = 65f;
 
-    [Tooltip("If true, only consider the horizontal plane for FOV (useful for top-down).")]
+    [Tooltip("If true, only consider the horizontal plane for FOv.")]
     public bool horizontalOnlyFOV = true;
 
     [Header("Line of Sight")]
     public bool requireLineOfSight = true;
     public LayerMask losObstacles = ~0;
     public float eyeHeight = 1.6f;
-    [Min(0f)] public float lostConfirmSeconds = 0.75f;
+    [Min(0f)] public float lostConfirmSeconds = 7.5f;
 
     [Header("Investigation")]
     [Tooltip("How long the enemy will search around the noise before giving up.")]
     public float investigateDuration = 4f;
 
-    [Tooltip("How close to the noise point counts as \"arrived\".")]
+    [Tooltip("How close to the noise point counts as arrived.")]
     public float investigateReachRadius = 1.5f;
 
     [HideInInspector] public bool   hasNoiseToInvestigate;
@@ -66,8 +66,8 @@ public class EnemyAI : NetworkBehaviour
 
     //stun pending data (filled right before switching to StunState)
     [HideInInspector] public Vector3 PendingStunDirectionWorld;
-    [HideInInspector] public float   PendingStunDuration;
-    [HideInInspector] public float   PendingStunInvestigateDistance;
+    [HideInInspector] public float PendingStunDuration;
+    [HideInInspector] public float PendingStunInvestigateDistance;
     [HideInInspector] public bool PendingStunHadTarget;
 
 
@@ -119,8 +119,7 @@ public class EnemyAI : NetworkBehaviour
             //Passed all checks
             //Find the closest valid target
             float distSqr = (transform.position - playerTransform.position).sqrMagnitude;
-            if (distSqr < closestDistSqr)
-            {
+            if (distSqr < closestDistSqr) {
                 closestDistSqr = distSqr;
                 closestTarget = playerTransform;
             }
@@ -207,40 +206,6 @@ public class EnemyAI : NetworkBehaviour
             return hit.transform.IsChildOf(t);
         }
         return true;
-    }
-
-    //Regular noises call with bias=1
-    public void NotifyHeardNoise(Vector3 position, float suspicion) { NotifyHeardNoise(position, suspicion, 1f); }
-
-    public void NotifyHeardNoise(Vector3 position, float suspicion, float bias) {
-        // Debug.Log($"[AI Notify] {gameObject.name} noise at {position}, susp={suspicion:F2}, bias={bias:F2}, state={_currentState?.GetType().Name}");
-
-        if (_currentState == _pursue) {
-            Debug.Log("[AI Notify] ignoring noise - currently pursuing");
-            return;
-        }
-
-        float score = Mathf.Max(0f, suspicion) * Mathf.Max(0.001f, bias);
-
-        //Use weighted score for arbitration
-        if (hasNoiseToInvestigate && score <= noiseScore) {
-            Debug.Log($"[AI Notify] ignored (score {score:F3} <= current {noiseScore:F3})");
-            return;
-        }
-
-        hasNoiseToInvestigate = true;
-        noisePosition         = position;
-        noiseHeardTime        = Time.time;
-        noiseSuspicion        = suspicion;  //keep raw for debugging/UI
-        noiseScore            = score;      //weighted for comparisons
-
-        Debug.Log($"[AI Notify] accepted. raw={noiseSuspicion:F2} score={noiseScore:F2}");
-
-        if (_currentState == _patrol)
-        {
-            Debug.Log("[AI Notify] switching from patrol to investigate");
-            SwitchState(_investigate);
-        }
     }
     
     public void ApplyStunWorld(Vector3 hitDirWorld, float duration, float investigateDistance) {

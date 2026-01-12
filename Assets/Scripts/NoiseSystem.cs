@@ -4,8 +4,8 @@ using System.Collections.Generic;
 
 public struct NoiseEvent {
     public Vector3 Position;
-    public float Radius;       //how far it can be heard
-    public float Loudness;     //normalized 0–1, for AI weighting
+    public float Radius; //how far it can be heard
+    public float Loudness; //normalized 0–1, for AI weighting
     public NetworkObject Source; //who made the noise
 }
 

@@ -80,8 +80,7 @@ public class CharacterStats : NetworkBehaviour
         }
     }
 
-    private void OnDestroy()
-    {
+    private void OnDestroy() {
         //Unsubscribe to avoid leaks / callbacks into destroyed objects
         currentHealth.OnValueChanged -= OnHealthChanged;
         currentStamina.OnValueChanged -= OnStaminaChanged;
@@ -90,13 +89,10 @@ public class CharacterStats : NetworkBehaviour
     private void Update() {
         if (!IsServer) return;
 
-        if (!AreWeAPlayer && currentHealth.Value <= 0) {
-            HandleDeathServer();
-        }
+        if (ShouldDieNow()) HandleDeathServer();
     }
 
-    private void FixedUpdate()
-    {
+    private void FixedUpdate() {
         if (!IsServer) return;
 
         //Server drives regen so all clients see consistent results
@@ -125,8 +121,7 @@ public class CharacterStats : NetworkBehaviour
 
     #region Damage API
 
-    public void ApplyDamage(float damage)
-    {
+    public void ApplyDamage(float damage) {
         if (!IsServer) return;
         if (isImmune) return;
 
@@ -139,14 +134,10 @@ public class CharacterStats : NetworkBehaviour
             PlayFlinchClientRpc();
         }
 
-        if (!AreWeAPlayer && currentHealth.Value <= 0)
-        {
-            HandleDeathServer();
-        }
+        if (ShouldDieNow()) HandleDeathServer();
     }
 
-    public void Heal(float damage)
-    {
+    public void Heal(float damage) {
         if (!IsServer) return;
 
         currentHealth.Value += damage;
@@ -171,6 +162,15 @@ public class CharacterStats : NetworkBehaviour
     #endregion
 
     #region Death / Ragdoll
+    private bool deathHandled = false;
+    private bool ShouldDieNow() {
+        //NPCs always die.
+        if (!AreWeAPlayer) return currentHealth.Value <= 0;
+
+        //Players die only when debug is off.
+        if (GameManager.Instance == null) return false; //Abort if gm null for whatever reason
+        return !GameManager.Instance.IsDebug && currentHealth.Value <= 0;
+    }
 
     [ClientRpc]
     private void PlayFlinchClientRpc() {
@@ -180,6 +180,9 @@ public class CharacterStats : NetworkBehaviour
     }
 
     private void HandleDeathServer() {
+        if (deathHandled) return;
+        deathHandled = true;
+        
         if (ragdollPrefab != null) {
             var ragdoll = Instantiate(ragdollPrefab, transform.position, transform.rotation);
 
@@ -196,14 +199,10 @@ public class CharacterStats : NetworkBehaviour
 
         // Despawn the character over the network
         var thisNetObj = GetComponent<NetworkObject>();
-        if (thisNetObj != null && thisNetObj.IsSpawned)
-        {
+        if (thisNetObj != null && thisNetObj.IsSpawned) {
             thisNetObj.Despawn();
         }
-        else
-        {
-            Destroy(gameObject);
-        }
+        else { Destroy(gameObject); }
     }
 
     #endregion
